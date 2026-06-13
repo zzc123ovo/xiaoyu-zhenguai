@@ -69,14 +69,45 @@ const CloudStore = (() => {
         }
     }
 
+    // ====== 推送本地数据到云端 ======
+    async function pushLocal() {
+        for (const key of SYNC_KEYS) {
+            const raw = localStorage.getItem('lina_' + key);
+            if (!raw) continue;
+            try {
+                const val = JSON.parse(raw);
+                // 清理旧时间戳
+                delete val._cloud_updated;
+                const json = JSON.stringify(val);
+                const ts = new Date().toISOString();
+                await fetch(API + '?key=eq.' + encodeURIComponent(key), {
+                    method: 'POST',
+                    headers: { ...hdrs(), 'Prefer': 'resolution=merge-duplicates' },
+                    body: JSON.stringify({ key, value: json, updated_at: ts }),
+                });
+                lastSnapshot[key] = json;
+                console.log('☁️ 推送本地:', key);
+            } catch (e) {
+                console.warn('☁️ 推送失败:', key, e.message);
+            }
+        }
+    }
+
     // ====== 初始化 ======
     async function init() {
         if (ready) return;
         console.log('☁️ CloudStore 初始化...');
 
-        await pullAll(); // 无条件覆盖本地
+        const hasCloud = await pullAll();
+
+        if (!hasCloud) {
+            // 云端空 → 把本地数据推上去（首台设备初始化云端）
+            console.log('☁️ 云端无数据，推送本地数据...');
+            await pushLocal();
+        }
+
         ready = true;
-        console.log('☁️ 初始化完成，快照:', Object.keys(lastSnapshot));
+        console.log('☁️ 初始化完成');
 
         // 每 3 秒检查云端变化
         if (!pollTimer) {

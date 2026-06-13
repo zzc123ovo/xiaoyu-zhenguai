@@ -21,7 +21,15 @@ const RemindersModule = (() => {
     }
 
     function loadData() {
-        dailyData = StorageModule.get('users_daily_data', makeFreshData());
+        let raw = StorageModule.get('users_daily_data', null);
+
+        // 迁移旧格式 {xiaoyu:{...}, xiaochuan:{...}} → 新格式 {date, waterCount, wellness}
+        if (raw && raw.xiaoyu && !raw.date) {
+            console.log('🔄 迁移旧数据格式...');
+            raw = makeFreshData();
+        }
+
+        dailyData = raw || makeFreshData();
         if (!dailyData.date || dailyData.date !== getTodayKey()) {
             dailyData = makeFreshData();
         }
