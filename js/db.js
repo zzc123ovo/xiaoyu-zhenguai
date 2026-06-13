@@ -1,231 +1,155 @@
 /* ============================================
-   云端同步模块 - Supabase REST API
-   不依赖外部 SDK，直接用 fetch()
-   两台手机共享数据，定时轮询 + 实时写入
+   云端同步 - Supabase REST API
+   纯 fetch()，无需外部 SDK
+   写入 → 立即 POST 到云端
+   读取 → 启动时拉取 + 每 5 秒轮询
    ============================================ */
 
 const CloudStore = (() => {
-    const SUPABASE_URL = 'https://xsecjawvrqelkxdhwfix.supabase.co';
-    const SUPABASE_KEY = 'sb_publishable_uKPRFS3_Ltp0bxdDNuPkow_bhxz-CIA';
-    const API = SUPABASE_URL + '/rest/v1/app_data';
+    const URL = 'https://xsecjawvrqelkxdhwfix.supabase.co';
+    const KEY = 'sb_publishable_uKPRFS3_Ltp0bxdDNuPkow_bhxz-CIA';
+    const API = URL + '/rest/v1/app_data';
 
+    // 需要云端同步的数据
     const SYNC_KEYS = [
-        'period_settings',
-        'moods',
-        'meals',
-        'calendar_events',
-        'users_daily_data',
-        'partner_reminders',
-        'ar_surprises',
+        'period_settings', 'moods', 'meals', 'calendar_events',
+        'users_daily_data', 'partner_reminders', 'ar_surprises',
     ];
 
     let ready = false;
-    let updateCallbacks = [];
+    let callbacks = [];
     let pollTimer = null;
-    let lastPollTime = 0;
 
-    // 防抖写入队列
-    let syncQueue = {};
-    let syncTimer = null;
-
-    // ====== HTTP 工具 ======
-    function headers() {
+    // ====== fetch 封装 ======
+    function hdrs() {
         return {
-            'apikey': SUPABASE_KEY,
-            'Authorization': 'Bearer ' + SUPABASE_KEY,
+            'apikey': KEY,
+            'Authorization': 'Bearer ' + KEY,
             'Content-Type': 'application/json',
-            'Prefer': 'return=minimal',
         };
     }
 
-    // ====== 初始化 ======
+    // ====== 初始化：拉云端数据 → 写本地 ======
     async function init() {
         if (ready) return;
+        console.log('☁️ CloudStore init - 拉取云端数据...');
 
-        console.log('☁️ 正在从云端拉取数据...');
+        for (const key of SYNC_KEYS) {
+            try {
+                const resp = await fetch(
+                    API + '?select=key,value,updated_at&key=eq.' + key + '&limit=1&_=' + Date.now(),
+                    { method: 'GET', headers: hdrs() }
+                );
+                if (!resp.ok) continue;
+                const rows = await resp.json();
+                if (!rows || rows.length === 0) continue;
 
-        // 1. 先从云端拉取全量数据
-        await pullAllFromCloud();
+                const row = rows[0];
+                const cloudTime = row.updated_at ? new Date(row.updated_at).getTime() : 0;
+                const localRaw = localStorage.getItem('lina_' + key);
+                let localTime = 0;
+                if (localRaw) {
+                    try { localTime = JSON.parse(localRaw)._cloud_updated || 0; } catch (e) {}
+                }
+
+                // 云端更新 → 覆盖本地
+                if (cloudTime > localTime || !localRaw) {
+                    const val = typeof row.value === 'string' ? JSON.parse(row.value) : row.value;
+                    val._cloud_updated = cloudTime;
+                    localStorage.setItem('lina_' + key, JSON.stringify(val));
+                    console.log('☁️ 拉取:', key, cloudTime > localTime ? '(云端更新)' : '(本地缺失)');
+                } else {
+                    console.log('☁️ 跳过:', key, '(本地已最新)');
+                }
+            } catch (e) {
+                console.warn('☁️ 拉取失败:', key, e.message);
+            }
+        }
 
         ready = true;
-        console.log('☁️ 云端同步已就绪');
+        console.log('☁️ 初始化完成');
 
-        // 2. 启动轮询（每5秒检查对方是否更新）
+        // 启动轮询
         startPolling();
     }
 
-    // ====== 从云端拉取全量数据 ======
-    async function pullAllFromCloud() {
-        try {
-            // 构建带时间戳的 URL 避免缓存
-            const url = API + '?select=key,value,updated_at&order=updated_at.desc&limit=50&_=' + Date.now();
-
-            const resp = await fetch(url, {
-                method: 'GET',
-                headers: headers(),
-            });
-
-            if (!resp.ok) {
-                const text = await resp.text();
-                console.error('☁️ 拉取失败 HTTP', resp.status, text.substring(0, 200));
-                return;
-            }
-
-            const data = await resp.json();
-            if (!data || data.length === 0) {
-                console.log('☁️ 云端暂无数据');
-                return;
-            }
-
-            let pulled = 0;
-            data.forEach(row => {
-                const key = row.key;
-                const value = row.value;
-                if (!key || !value) return;
-
-                const cloudTime = row.updated_at ? new Date(row.updated_at).getTime() : 0;
-                const localRaw = localStorage.getItem('lina_' + key);
-
-                let localTime = 0;
-                if (localRaw) {
-                    try {
-                        const d = JSON.parse(localRaw);
-                        localTime = d._cloud_updated || 0;
-                    } catch (e) {}
-                }
-
-                // 云端更新的才覆盖本地
-                if (cloudTime > localTime || !localRaw) {
-                    const parsed = typeof value === 'string' ? JSON.parse(value) : value;
-                    parsed._cloud_updated = cloudTime;
-                    localStorage.setItem('lina_' + key, JSON.stringify(parsed));
-                    pulled++;
-                }
-            });
-
-            lastPollTime = Date.now();
-            console.log('☁️ 拉取完成，更新', pulled, '条（共', data.length, '条）');
-            return pulled;
-        } catch (e) {
-            console.error('☁️ 拉取异常:', e.message);
-        }
-    }
-
-    // ====== 定时轮询（检测对方改动） ======
+    // ====== 轮询：每 5 秒检查对方改动 ======
     function startPolling() {
         if (pollTimer) return;
+        let lastCheck = new Date(Date.now() - 10000).toISOString(); // 查最近10秒
 
-        // 每 5 秒检查一次
         pollTimer = setInterval(async () => {
             try {
-                // 只查比自己最后写入时间更新的记录
-                const url = API + '?select=key,value,updated_at&updated_at=gt.' +
-                    new Date(lastPollTime).toISOString() +
-                    '&order=updated_at.desc&limit=20&_=' + Date.now();
+                const ts = lastCheck;
+                const resp = await fetch(
+                    API + '?select=key,value,updated_at&updated_at=gt.' + ts +
+                    '&order=updated_at.desc&limit=20&_=' + Date.now(),
+                    { method: 'GET', headers: hdrs() }
+                );
+                lastCheck = new Date().toISOString();
 
-                const resp = await fetch(url, { method: 'GET', headers: headers() });
                 if (!resp.ok) return;
-
-                const data = await resp.json();
-                if (!data || data.length === 0) return;
+                const rows = await resp.json();
+                if (!rows || rows.length === 0) return;
 
                 let changed = false;
-                data.forEach(row => {
+                for (const row of rows) {
                     const key = row.key;
-                    const value = row.value;
-                    if (!key || !value) return;
-                    // 跳过自己队列中待发送的 key
-                    if (syncQueue[key] !== undefined) return;
+                    if (!key || !row.value) continue;
+                    if (!SYNC_KEYS.includes(key)) continue;
 
                     const cloudTime = row.updated_at ? new Date(row.updated_at).getTime() : Date.now();
-                    const parsed = typeof value === 'string' ? JSON.parse(value) : value;
-                    parsed._cloud_updated = cloudTime;
-                    localStorage.setItem('lina_' + key, JSON.stringify(parsed));
-                    changed = true;
-                    triggerUpdate(key);
-                });
+                    const localRaw = localStorage.getItem('lina_' + key);
+                    let localTime = 0;
+                    if (localRaw) {
+                        try { localTime = JSON.parse(localRaw)._cloud_updated || 0; } catch (e) {}
+                    }
 
-                if (changed) {
-                    lastPollTime = Date.now();
+                    // 只覆盖本地比云端旧的
+                    if (cloudTime <= localTime) continue;
+
+                    const val = typeof row.value === 'string' ? JSON.parse(row.value) : row.value;
+                    val._cloud_updated = cloudTime;
+                    localStorage.setItem('lina_' + key, JSON.stringify(val));
+                    changed = true;
+                    console.log('📡 轮询更新:', key);
                 }
+
+                if (changed) notifyCallbacks();
             } catch (e) {
-                // 静默忽略轮询错误
+                // 静默
             }
         }, 5000);
-
-        console.log('🔗 轮询已启动（每5秒）');
+        console.log('🔗 轮询已启动（5秒）');
     }
 
-    // ====== 通知 UI 刷新 ======
-    function triggerUpdate(key) {
-        updateCallbacks.forEach(cb => {
-            try { cb(key); } catch (e) {}
-        });
-    }
-
-    // ====== 写入云端 ======
+    // ====== 写入云端（同步调用，异步发送） ======
     function cloudSet(key, value) {
+        if (!SYNC_KEYS.includes(key)) return;
+
         // 打时间戳
+        const ts = Date.now();
         if (value && typeof value === 'object' && !Array.isArray(value)) {
-            value._cloud_updated = Date.now();
+            value._cloud_updated = ts;
         }
 
-        // 更新本地（含时间戳）
-        try {
-            localStorage.setItem('lina_' + key, JSON.stringify(value));
-        } catch (e) {}
+        // 更新本地
+        try { localStorage.setItem('lina_' + key, JSON.stringify(value)); } catch (e) {}
 
-        if (!ready || !SYNC_KEYS.includes(key)) return;
-
-        // 防抖：同一 key 多次写合并
-        syncQueue[key] = value;
-        if (syncTimer) clearTimeout(syncTimer);
-        syncTimer = setTimeout(() => flushQueue(), 300);
-    }
-
-    async function flushQueue() {
-        const items = { ...syncQueue };
-        syncQueue = {};
-
-        for (const [key, value] of Object.entries(items)) {
-            try {
-                const jsonStr = JSON.stringify(value);
-                // 使用 upsert：如果 key 存在则更新，否则插入
-                const resp = await fetch(API + '?key=eq.' + encodeURIComponent(key), {
-                    method: 'POST',
-                    headers: { ...headers(), 'Prefer': 'resolution=merge-duplicates' },
-                    body: JSON.stringify({
-                        key: key,
-                        value: jsonStr,
-                        updated_at: new Date().toISOString(),
-                    }),
-                });
-
-                if (!resp.ok && resp.status !== 201 && resp.status !== 409) {
-                    console.error('☁️ 写入失败 (' + key + ') HTTP', resp.status);
-                }
-            } catch (e) {
-                console.error('☁️ 写入异常 (' + key + '):', e.message);
-            }
+        // 异步发送到云端
+        if (ready) {
+            const jsonStr = JSON.stringify(value);
+            fetch(API, {
+                method: 'POST',
+                headers: { ...hdrs(), 'Prefer': 'resolution=merge-duplicates' },
+                body: JSON.stringify({ key, value: jsonStr, updated_at: new Date(ts).toISOString() }),
+            }).catch(e => console.warn('☁️ 写入失败:', key, e.message));
         }
-
-        lastPollTime = Date.now();
     }
 
-    function onUpdate(callback) {
-        updateCallbacks.push(callback);
-    }
+    // ====== 回调 ======
+    function onUpdate(fn) { callbacks.push(fn); }
+    function notifyCallbacks() { callbacks.forEach(fn => { try { fn(); } catch (e) {} }); }
 
-    async function refresh() {
-        await pullAllFromCloud();
-        SYNC_KEYS.forEach(key => triggerUpdate(key));
-    }
-
-    return {
-        init,
-        cloudSet,
-        onUpdate,
-        refresh,
-        isReady: () => ready,
-    };
+    return { init, cloudSet, onUpdate, isReady: () => ready };
 })();

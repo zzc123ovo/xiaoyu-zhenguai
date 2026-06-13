@@ -99,7 +99,7 @@ const MealsModule = (() => {
         }
 
         const caption = document.getElementById('meal-caption-input').value.trim() || '美食分享 🍽️';
-        const currentUser = AppModule.getCurrentUser();
+        const currentUser = getCurrentUser();
 
         meals.push({
             id: Date.now(),

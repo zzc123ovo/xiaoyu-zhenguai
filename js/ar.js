@@ -150,7 +150,7 @@ const ARModule = (() => {
         const message = prompt('悄悄话内容：');
         if (!message || !message.trim()) return;
 
-        const from = AppModule.getCurrentUser() === 'xiaochuan' ? '小川' : '小鱼';
+        const from = getCurrentUser() === 'xiaochuan' ? '小川' : '小鱼';
 
         surprises.push({
             id: Date.now(),

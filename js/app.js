@@ -1,6 +1,6 @@
 /* ============================================
    小鱼真乖 · 玲娜贝儿
-   主控制器 - 密码登录 + 双用户
+   主控制器 - 单账号登录 + 云端同步
    ============================================ */
 
 // --- 存储工具 ---
@@ -15,7 +15,7 @@ const StorageModule = {
     set(key, value) {
         try { localStorage.setItem('lina_' + key, JSON.stringify(value)); }
         catch (e) { console.error('存储失败:', e); }
-        // 同步到云端（异步，不阻塞本地操作）
+        // 同步到云端
         if (typeof CloudStore !== 'undefined') CloudStore.cloudSet(key, value);
     },
     remove(key) { try { localStorage.removeItem('lina_' + key); } catch (e) {} },
@@ -36,6 +36,25 @@ function showToast(message) {
 }
 
 // ========================================
+//  当前用户（全局单例）
+// ========================================
+let currentUser = 'xiaoyu';
+
+function getCurrentUser() { return currentUser; }
+function getOtherUser() { return currentUser === 'xiaochuan' ? 'xiaoyu' : 'xiaochuan'; }
+
+function updateUserBadge() {
+    const badge = document.getElementById('current-user-badge');
+    if (badge) {
+        badge.textContent = currentUser === 'xiaochuan' ? '🦊 小川' : '🐟 小鱼';
+    }
+}
+
+function getUserName(user) {
+    return user === 'xiaochuan' ? '小川' : '小鱼';
+}
+
+// ========================================
 //  登录系统
 // ========================================
 const LoginModule = (() => {
@@ -44,25 +63,19 @@ const LoginModule = (() => {
     let passwordInput = '';
 
     function init() {
-        const loginScreen = document.getElementById('login-screen');
-
-        // 如果之前登录过，直接进入
         const saved = StorageModule.get('logged_in_user');
         if (saved) {
-            AppModule.setUser(saved);
+            currentUser = saved;
             skipLogin();
             return;
         }
 
-        // 显示登录
         document.getElementById('login-screen').classList.remove('hidden');
 
-        // 身份选择
         document.querySelectorAll('.login-card').forEach(card => {
             card.addEventListener('click', () => selectUser(card.dataset.user));
         });
 
-        // 数字键盘
         document.querySelectorAll('.num-key').forEach(btn => {
             btn.addEventListener('click', () => {
                 const n = btn.dataset.n;
@@ -72,15 +85,12 @@ const LoginModule = (() => {
                     passwordInput += n;
                 }
                 updateDots();
-
-                // 输满4位自动验证
                 if (passwordInput.length === 4) {
                     setTimeout(() => verifyPassword(), 260);
                 }
             });
         });
 
-        // 也支持物理键盘输入
         document.addEventListener('keydown', onKeyDown);
     }
 
@@ -99,14 +109,11 @@ const LoginModule = (() => {
     function selectUser(user) {
         selectedUser = user;
         passwordInput = '';
-
         document.querySelectorAll('.login-card').forEach(c => {
             c.classList.toggle('selected', c.dataset.user === user);
         });
-
         document.getElementById('login-pw-box').style.display = 'block';
-        const name = user === 'xiaochuan' ? '小川' : '小鱼';
-        document.getElementById('login-pw-label').textContent = `输入 ${name} 的密码`;
+        document.getElementById('login-pw-label').textContent = `输入 ${getUserName(user)} 的密码`;
         document.getElementById('login-error').textContent = '';
         updateDots();
     }
@@ -120,32 +127,22 @@ const LoginModule = (() => {
 
     function verifyPassword() {
         if (!selectedUser) return;
-
         if (PASSWORDS[selectedUser] === passwordInput) {
-            // 登录成功！
-            AppModule.setUser(selectedUser);
-            StorageModule.set('logged_in_user', selectedUser);
-
+            currentUser = selectedUser;
+            StorageModule.set('logged_in_user', currentUser);
             const loginScreen = document.getElementById('login-screen');
             const app = document.getElementById('app');
-
             loginScreen.classList.add('fade-out');
             app.classList.remove('hidden');
-
             setTimeout(() => {
                 loginScreen.classList.add('hidden');
                 loginScreen.classList.remove('fade-out');
             }, 500);
-
-            // 初始化应用
             initApp();
         } else {
-            // 密码错误
             passwordInput = '';
             updateDots();
             document.getElementById('login-error').textContent = '密码不对哦，再试一次～';
-
-            // 抖动动画
             document.querySelectorAll('.login-dot').forEach(d => {
                 d.classList.add('shake');
                 setTimeout(() => d.classList.remove('shake'), 500);
@@ -159,51 +156,23 @@ const LoginModule = (() => {
         initApp();
     }
 
-    return { init };
-})();
+    // 退出登录
+    function logout() {
+        StorageModule.remove('logged_in_user');
+        currentUser = 'xiaoyu';
+        selectedUser = null;
+        passwordInput = '';
 
-// ========================================
-//  用户系统
-// ========================================
-const AppModule = (() => {
-    let currentUser = 'xiaoyu';
-
-    function init() {
-        // 用户切换按钮
-        document.querySelectorAll('.user-btn').forEach(btn => {
-            btn.addEventListener('click', () => switchUser(btn.dataset.user));
-        });
-        applyUser();
+        document.getElementById('app').classList.add('hidden');
+        document.getElementById('login-screen').classList.remove('hidden');
+        document.getElementById('login-screen').classList.remove('fade-out');
+        document.getElementById('login-pw-box').style.display = 'none';
+        document.querySelectorAll('.login-card').forEach(c => c.classList.remove('selected'));
+        document.getElementById('login-error').textContent = '';
+        updateDots();
     }
 
-    function setUser(user) {
-        currentUser = user;
-    }
-
-    function switchUser(user) {
-        if (currentUser === user) return;
-        currentUser = user;
-        StorageModule.set('logged_in_user', user);
-        applyUser();
-        updateGreeting();
-        RemindersModule.renderAll();
-        MoodModule.render();
-        MealsModule.render();
-        const name = user === 'xiaochuan' ? '小川' : '小鱼';
-        showToast(`已切换至 ${name} 视角`);
-        updateReminderCardTitle();
-    }
-
-    function applyUser() {
-        document.querySelectorAll('.user-btn').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.user === currentUser);
-        });
-    }
-
-    function getCurrentUser() { return currentUser; }
-    function getOtherUser() { return currentUser === 'xiaochuan' ? 'xiaoyu' : 'xiaochuan'; }
-
-    return { init, setUser, switchUser, getCurrentUser, getOtherUser };
+    return { init, logout };
 })();
 
 // ========================================
@@ -211,10 +180,8 @@ const AppModule = (() => {
 // ========================================
 function updateGreeting() {
     const hour = new Date().getHours();
-    const user = AppModule.getCurrentUser();
-    const name = user === 'xiaochuan' ? '小川' : '小鱼';
+    const name = getUserName(currentUser);
     let text, sub;
-
     if (hour < 6)       { text = '夜深了，早点休息～'; sub = '玲娜贝儿陪你进入梦乡 🌙'; }
     else if (hour < 9)  { text = `早安，${name}～`;   sub = '新的一天，元气满满！☀️'; }
     else if (hour < 12) { text = `上午好呀，${name}～`; sub = '今天也是美好的一天 💖'; }
@@ -223,7 +190,6 @@ function updateGreeting() {
     else if (hour < 19) { text = `傍晚好，${name}～`; sub = '晚餐要好好吃哦 🍲'; }
     else if (hour < 22) { text = `晚上好，${name}～`; sub = '放松一下，泡个热水澡吧 🛀'; }
     else                { text = '夜深了，早点休息～'; sub = '玲娜贝儿陪你进入梦乡 🌙'; }
-
     document.getElementById('greeting-text').textContent = text;
     document.getElementById('greeting-sub').textContent = sub;
 }
@@ -241,10 +207,8 @@ function switchPage(pageName) {
     document.querySelectorAll('.nav-item').forEach(i => i.classList.toggle('active', i.dataset.page === pageName));
     document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + pageName));
     document.querySelector('.main-content').scrollTop = 0;
-
     if (pageName === 'ar') ARModule.onPageActive();
     else ARModule.onPageInactive();
-
     if (pageName === 'calendar') CalendarModule.render();
     if (pageName === 'period') PeriodModule.updateAllUI();
     if (pageName === 'daily') { RemindersModule.renderAll(); MealsModule.render(); }
@@ -268,9 +232,8 @@ function getTodayStr() {
 }
 
 function updateReminderCardTitle() {
-    const other = AppModule.getOtherUser();
-    document.getElementById('reminder-card-title').textContent =
-        (other === 'xiaochuan' ? '小川' : '小鱼') + '的提醒';
+    const other = getOtherUser();
+    document.getElementById('reminder-card-title').textContent = getUserName(other) + '的提醒';
 }
 
 function checkDayReset() {
@@ -297,22 +260,47 @@ function initLocationButton() {
     });
 }
 
+function initLogoutButton() {
+    const btn = document.getElementById('btn-logout');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+        if (confirm('确定要退出登录吗？')) {
+            LoginModule.logout();
+        }
+    });
+}
+
+// ========================================
+//  刷新全部 UI（云端数据变化后回调）
+// ========================================
+function refreshAllUI() {
+    PeriodModule.updateAllUI();
+    CalendarModule.render();
+    RemindersModule.renderAll();
+    MoodModule.render();
+    MealsModule.render();
+    MealsModule.updateHomeStat();
+    updateReminderCardTitle();
+}
+
 // ========================================
 //  初始化 App
 // ========================================
 async function initApp() {
-    // ★ 先等云端数据拉取完成，再初始化模块
+    // ★ 先拉取云端数据
     if (typeof CloudStore !== 'undefined') {
+        console.log('☁️ 正在同步云端数据...');
         await CloudStore.init();
-        console.log('☁️ 云端数据已就绪');
     }
 
-    AppModule.init();
+    updateUserBadge();
     updateHeaderDate();
     updateGreeting();
     initNavigation();
     initLocationButton();
+    initLogoutButton();
 
+    // 模块初始化（此时 localStorage 已有云端数据）
     PeriodModule.init();
     CalendarModule.init();
     RemindersModule.init();
@@ -334,36 +322,27 @@ async function initApp() {
 
     // 云端数据变化时自动刷新 UI
     if (typeof CloudStore !== 'undefined') {
-        CloudStore.onUpdate((key) => {
-            console.log('📡 收到云端更新:', key);
-            if (key === 'moods') MoodModule.render();
-            if (key === 'meals') { MealsModule.render(); MealsModule.updateHomeStat(); }
-            if (key === 'calendar_events') CalendarModule.render();
-            if (key === 'users_daily_data') RemindersModule.renderAll();
-            if (key === 'partner_reminders') RemindersModule.render();
-            if (key === 'period_settings') { PeriodModule.updateAllUI(); CalendarModule.render(); }
+        CloudStore.onUpdate(() => {
+            console.log('📡 对方更新了数据，刷新 UI');
+            refreshAllUI();
         });
     }
 
-    console.log('🦊 小鱼真乖 · 玲娜贝儿 已就绪！');
-    console.log('💖 亲爱的小鱼，这是小川特给你做的app哦～');
+    console.log('🦊 小鱼真乖 · 玲娜贝儿 已就绪！(' + getUserName(currentUser) + ')');
 }
 
 // ========================================
 //  启动
 // ========================================
 document.addEventListener('DOMContentLoaded', () => {
-    // 启动画面
     const splash = document.getElementById('splash-screen');
     setTimeout(() => {
         splash.classList.add('fade-out');
         setTimeout(() => { if (splash.parentNode) splash.remove(); }, 600);
     }, 1800);
 
-    // 显示登录
     LoginModule.init();
 
-    // 防止双击缩放
     document.addEventListener('dblclick', e => {
         if (e.target.tagName === 'BUTTON') e.preventDefault();
     }, { passive: false });

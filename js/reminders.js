@@ -58,7 +58,7 @@ const RemindersModule = (() => {
     }
 
     function getCurrentData() {
-        const user = AppModule.getCurrentUser();
+        const user = getCurrentUser();
         if (!usersData[user]) usersData[user] = makeFreshData();
         return usersData[user];
     }
@@ -111,8 +111,8 @@ const RemindersModule = (() => {
         const text = prompt('添加给对方的提醒：');
         if (!text || !text.trim()) return;
 
-        const currentUser = AppModule.getCurrentUser();
-        const otherUser = AppModule.getOtherUser();
+        const currentUser = getCurrentUser();
+        const otherUser = getOtherUser();
 
         partnerReminders.push({
             id: Date.now(),
@@ -149,10 +149,10 @@ const RemindersModule = (() => {
     function renderPartnerReminders() {
         const list = document.getElementById('partner-reminders');
         const badge = document.getElementById('reminder-count');
-        const otherUser = AppModule.getOtherUser();
+        const otherUser = getOtherUser();
 
         // 只显示发给当前用户的提醒
-        const currentUser = AppModule.getCurrentUser();
+        const currentUser = getCurrentUser();
         const relevant = partnerReminders.filter(r => r.to === currentUser);
 
         if (badge) badge.textContent = relevant.length;

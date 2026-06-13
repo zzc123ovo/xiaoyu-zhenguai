@@ -38,7 +38,7 @@ const MoodModule = (() => {
         });
 
         // 预设选中当前用户的心情emoji
-        const currentUser = AppModule.getCurrentUser();
+        const currentUser = getCurrentUser();
         if (moods[currentUser] && moods[currentUser].emoji) {
             selectedEmoji = moods[currentUser].emoji;
             document.querySelectorAll('.mood-emoji-option').forEach(btn => {
@@ -61,7 +61,7 @@ const MoodModule = (() => {
     }
 
     function openMoodModal() {
-        const currentUser = AppModule.getCurrentUser();
+        const currentUser = getCurrentUser();
         const currentMood = moods[currentUser];
 
         // 预选当前emoji
@@ -84,7 +84,7 @@ const MoodModule = (() => {
     }
 
     function saveMood() {
-        const currentUser = AppModule.getCurrentUser();
+        const currentUser = getCurrentUser();
         const text = document.getElementById('mood-text-input').value.trim() || '今天心情不错～';
         const now = new Date();
 
@@ -115,7 +115,7 @@ const MoodModule = (() => {
 
     // 获取当前用户的心情消息（用于首页问候等）
     function getCurrentUserMood() {
-        const user = AppModule.getCurrentUser();
+        const user = getCurrentUser();
         return moods[user] || { emoji: '😊', text: '今天心情不错～' };
     }
 
