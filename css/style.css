@@ -1429,6 +1429,25 @@ body::before {
     transform: scale(0.97);
 }
 
+.btn-sync {
+    width: 100%;
+    padding: 14px;
+    background: var(--pink-primary);
+    color: var(--white);
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: var(--font-main);
+    transition: all 0.2s;
+}
+
+.btn-sync:active {
+    transform: scale(0.97);
+    opacity: 0.85;
+}
+
 /* --- 底部导航 --- */
 .bottom-nav {
     position: fixed;

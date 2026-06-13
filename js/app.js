@@ -270,6 +270,20 @@ function initLogoutButton() {
     });
 }
 
+function initSyncButton() {
+    const btn = document.getElementById('btn-sync');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+        btn.textContent = '⏳ 同步中...';
+        btn.disabled = true;
+        await CloudStore._forcePull();
+        refreshAllUI();
+        btn.textContent = '☁️ 手动同步数据';
+        btn.disabled = false;
+        showToast('✅ 数据已同步');
+    });
+}
+
 // ========================================
 //  刷新全部 UI（云端数据变化后回调）
 // ========================================
@@ -299,6 +313,7 @@ async function initApp() {
     initNavigation();
     initLocationButton();
     initLogoutButton();
+    initSyncButton();
 
     // 模块初始化（此时 localStorage 已有云端数据）
     PeriodModule.init();
@@ -322,7 +337,7 @@ async function initApp() {
 
     // 云端数据变化时自动刷新 UI
     if (typeof CloudStore !== 'undefined') {
-        CloudStore.onUpdate(() => {
+        CloudStore.onChange(() => {
             console.log('📡 对方更新了数据，刷新 UI');
             refreshAllUI();
         });

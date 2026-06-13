@@ -1,16 +1,14 @@
 /* ============================================
    日常提醒模块 - 喝水、健康习惯、伙伴提醒
+   共享数据：两人看到完全一样的内容
    ============================================ */
 
 const RemindersModule = (() => {
     const WATER_GOAL = 8;
 
-    // 每个用户独立的日常数据
-    let usersData = {};  // { 'xiaoyu': {...}, 'xiaochuan': {...} }
-
-    // 伙伴提醒
+    // 共享日常数据
+    let dailyData = {};
     let partnerReminders = [];
-
     let eventsBound = false;
 
     function init() {
@@ -23,21 +21,11 @@ const RemindersModule = (() => {
     }
 
     function loadData() {
-        usersData = StorageModule.get('users_daily_data', {
-            xiaoyu: makeFreshData(),
-            xiaochuan: makeFreshData(),
-        });
-
-        // 确保两个用户都有数据
-        ['xiaoyu', 'xiaochuan'].forEach(user => {
-            if (!usersData[user]) usersData[user] = makeFreshData();
-            if (usersData[user].date !== getTodayKey()) {
-                usersData[user] = makeFreshData();
-            }
-        });
-
+        dailyData = StorageModule.get('users_daily_data', makeFreshData());
+        if (!dailyData.date || dailyData.date !== getTodayKey()) {
+            dailyData = makeFreshData();
+        }
         saveData();
-
         partnerReminders = StorageModule.get('partner_reminders', []);
     }
 
@@ -50,17 +38,11 @@ const RemindersModule = (() => {
     }
 
     function saveData() {
-        StorageModule.set('users_daily_data', usersData);
+        StorageModule.set('users_daily_data', dailyData);
     }
 
     function saveReminders() {
         StorageModule.set('partner_reminders', partnerReminders);
-    }
-
-    function getCurrentData() {
-        const user = getCurrentUser();
-        if (!usersData[user]) usersData[user] = makeFreshData();
-        return usersData[user];
     }
 
     function getTodayKey() {
@@ -72,24 +54,20 @@ const RemindersModule = (() => {
         document.getElementById('btn-add-water').addEventListener('click', addWater);
         document.getElementById('btn-add-reminder').addEventListener('click', addPartnerReminder);
 
-        // 健康习惯按钮
         document.querySelectorAll('.wellness-item').forEach(item => {
             item.querySelector('.wellness-check').addEventListener('click', () => {
-                const id = item.dataset.id;
-                toggleWellness(id);
+                toggleWellness(item.dataset.id);
             });
         });
     }
 
     function addWater() {
-        const data = getCurrentData();
-        if (data.waterCount < WATER_GOAL) {
-            data.waterCount++;
+        if (dailyData.waterCount < WATER_GOAL) {
+            dailyData.waterCount++;
             saveData();
             renderWater();
-            showToast(`已喝 ${data.waterCount} 杯水 💧`);
-
-            if (data.waterCount === WATER_GOAL) {
+            showToast(`已喝 ${dailyData.waterCount} 杯水 💧`);
+            if (dailyData.waterCount === WATER_GOAL) {
                 showToast('🎉 太棒了！今天的水量达标了！');
             }
         } else {
@@ -98,44 +76,39 @@ const RemindersModule = (() => {
     }
 
     function toggleWellness(id) {
-        const data = getCurrentData();
-        data.wellness[id] = !data.wellness[id];
+        dailyData.wellness[id] = !dailyData.wellness[id];
         saveData();
         renderWellness();
-        const label = data.wellness[id] ? '完成 ✅' : '取消';
-        showToast(label);
+        showToast(dailyData.wellness[id] ? '完成 ✅' : '取消');
     }
 
     // === 伙伴提醒 ===
     function addPartnerReminder() {
         const text = prompt('添加给对方的提醒：');
         if (!text || !text.trim()) return;
-
-        const currentUser = getCurrentUser();
-        const otherUser = getOtherUser();
-
+        const user = getCurrentUser();
+        const other = getOtherUser();
         partnerReminders.push({
             id: Date.now(),
-            from: currentUser,
-            fromName: currentUser === 'xiaochuan' ? '小川' : '小鱼',
-            to: otherUser,
+            from: user,
+            fromName: getUserName(user),
+            to: other,
             text: text.trim(),
             time: new Date().toISOString(),
             done: false,
         });
-
         saveReminders();
         renderPartnerReminders();
         showToast('提醒已添加 ✅');
     }
 
     function toggleReminderDone(id) {
-        const reminder = partnerReminders.find(r => r.id === id);
-        if (reminder) {
-            reminder.done = !reminder.done;
+        const r = partnerReminders.find(r => r.id === id);
+        if (r) {
+            r.done = !r.done;
             saveReminders();
             renderPartnerReminders();
-            showToast(reminder.done ? '已完成 ✅' : '已取消完成');
+            showToast(r.done ? '已完成 ✅' : '已取消完成');
         }
     }
 
@@ -149,26 +122,18 @@ const RemindersModule = (() => {
     function renderPartnerReminders() {
         const list = document.getElementById('partner-reminders');
         const badge = document.getElementById('reminder-count');
-        const otherUser = getOtherUser();
+        if (badge) badge.textContent = partnerReminders.length;
 
-        // 只显示发给当前用户的提醒
-        const currentUser = getCurrentUser();
-        const relevant = partnerReminders.filter(r => r.to === currentUser);
-
-        if (badge) badge.textContent = relevant.length;
-
-        if (relevant.length === 0) {
+        if (partnerReminders.length === 0) {
             list.innerHTML = '<p class="reminder-empty">暂无提醒～</p>';
         } else {
-            list.innerHTML = relevant.map(r => `
+            list.innerHTML = partnerReminders.map(r => `
                 <div class="reminder-item${r.done ? ' done' : ''}">
                     <button class="reminder-checkbox" data-id="${r.id}">${r.done ? '✓' : ''}</button>
                     <span class="reminder-text">${r.text}</span>
                     <span class="reminder-who">${r.fromName === '小川' ? '🦊' : '🐟'} ${r.fromName}</span>
                 </div>
             `).join('');
-
-            // 绑定完成按钮
             list.querySelectorAll('.reminder-checkbox').forEach(btn => {
                 btn.addEventListener('click', () => {
                     toggleReminderDone(parseInt(btn.dataset.id));
@@ -178,26 +143,23 @@ const RemindersModule = (() => {
     }
 
     function renderWater() {
-        const data = getCurrentData();
         const glassesDiv = document.getElementById('water-glasses');
         let html = '';
         for (let i = 0; i < WATER_GOAL; i++) {
-            html += `<span class="water-glass${i < data.waterCount ? ' filled' : ''}">💧</span>`;
+            html += `<span class="water-glass${i < dailyData.waterCount ? ' filled' : ''}">💧</span>`;
         }
         glassesDiv.innerHTML = html;
-
-        const progress = (data.waterCount / WATER_GOAL) * 100;
+        const progress = (dailyData.waterCount / WATER_GOAL) * 100;
         document.getElementById('water-progress-bar').style.width = progress + '%';
-        document.getElementById('water-count-text').textContent = `${data.waterCount} / ${WATER_GOAL} 杯`;
-        document.getElementById('stat-water-count').textContent = `${data.waterCount}/${WATER_GOAL}`;
+        document.getElementById('water-count-text').textContent = `${dailyData.waterCount} / ${WATER_GOAL} 杯`;
+        document.getElementById('stat-water-count').textContent = `${dailyData.waterCount}/${WATER_GOAL}`;
     }
 
     function renderWellness() {
-        const data = getCurrentData();
         document.querySelectorAll('.wellness-item').forEach(item => {
             const id = item.dataset.id;
             const check = item.querySelector('.wellness-check');
-            if (data.wellness[id]) {
+            if (dailyData.wellness[id]) {
                 check.textContent = '✓';
                 check.classList.add('done');
             } else {
@@ -217,27 +179,18 @@ const RemindersModule = (() => {
         renderPartnerReminders();
     }
 
-    // 获取提醒内容（供通知模块使用）
     function getReminders() {
         const reminders = [];
-        const data = getCurrentData();
         const now = new Date();
         const hour = now.getHours();
-
-        if (data.waterCount < WATER_GOAL && hour >= 9 && hour <= 21) {
+        if (dailyData.waterCount < WATER_GOAL && hour >= 9 && hour <= 21) {
             reminders.push({
                 id: 'water',
-                text: `💧 今天喝了 ${data.waterCount}/${WATER_GOAL} 杯水，记得多喝水哦～`,
+                text: `💧 今天喝了 ${dailyData.waterCount}/${WATER_GOAL} 杯水，记得多喝水哦～`,
             });
         }
-
         return reminders;
     }
 
-    return {
-        init,
-        getReminders,
-        renderAll,
-        render,
-    };
+    return { init, getReminders, renderAll, render };
 })();

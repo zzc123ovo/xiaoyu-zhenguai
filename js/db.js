@@ -1,8 +1,9 @@
 /* ============================================
-   云端同步 - Supabase REST API
-   纯 fetch()，无需外部 SDK
-   写入 → 立即 POST 到云端
-   读取 → 启动时拉取 + 每 5 秒轮询
+   云端同步 - Supabase REST
+   最简单可靠的方式：
+   1. 开机拉全量覆盖本地
+   2. 写操作即时 POST 云端
+   3. 每 3 秒拉全量比对 → 变化就刷新 UI
    ============================================ */
 
 const CloudStore = (() => {
@@ -10,17 +11,16 @@ const CloudStore = (() => {
     const KEY = 'sb_publishable_uKPRFS3_Ltp0bxdDNuPkow_bhxz-CIA';
     const API = URL + '/rest/v1/app_data';
 
-    // 需要云端同步的数据
     const SYNC_KEYS = [
         'period_settings', 'moods', 'meals', 'calendar_events',
         'users_daily_data', 'partner_reminders', 'ar_surprises',
     ];
 
     let ready = false;
-    let callbacks = [];
     let pollTimer = null;
+    let listeners = [];
+    let lastSnapshot = {}; // 上次云端 JSON 快照
 
-    // ====== fetch 封装 ======
     function hdrs() {
         return {
             'apikey': KEY,
@@ -29,127 +29,104 @@ const CloudStore = (() => {
         };
     }
 
-    // ====== 初始化：拉云端数据 → 写本地 ======
+    // ====== 拉全量 → 比对 → 覆盖本地 ======
+    async function pullAll() {
+        try {
+            const resp = await fetch(API + '?select=key,value&_=' + Date.now(), {
+                headers: hdrs(),
+            });
+            if (!resp.ok) {
+                console.warn('☁️ 拉取失败 HTTP', resp.status);
+                return false;
+            }
+            const rows = await resp.json();
+            if (!rows || rows.length === 0) {
+                console.log('☁️ 云端暂无数据');
+                return false;
+            }
+
+            let changed = false;
+            for (const row of rows) {
+                if (!row.key || row.value === undefined || row.value === null) continue;
+                if (!SYNC_KEYS.includes(row.key)) continue;
+
+                const cloudJSON = row.value; // Supabase 存的是 JSON 字符串
+                const oldJSON = lastSnapshot[row.key];
+
+                // 比对云端数据是否变化（跟上次快照比，不是跟本地比）
+                if (cloudJSON !== oldJSON) {
+                    // 覆盖本地 localStorage
+                    localStorage.setItem('lina_' + row.key, cloudJSON);
+                    lastSnapshot[row.key] = cloudJSON;
+                    changed = true;
+                    console.log('📡 云端更新:', row.key);
+                }
+            }
+            return changed;
+        } catch (e) {
+            console.warn('☁️ 拉取异常:', e.message);
+            return false;
+        }
+    }
+
+    // ====== 初始化 ======
     async function init() {
         if (ready) return;
-        console.log('☁️ CloudStore init - 拉取云端数据...');
+        console.log('☁️ CloudStore 初始化...');
 
-        for (const key of SYNC_KEYS) {
-            try {
-                const resp = await fetch(
-                    API + '?select=key,value,updated_at&key=eq.' + key + '&limit=1&_=' + Date.now(),
-                    { method: 'GET', headers: hdrs() }
-                );
-                if (!resp.ok) continue;
-                const rows = await resp.json();
-                if (!rows || rows.length === 0) continue;
-
-                const row = rows[0];
-                const cloudTime = row.updated_at ? new Date(row.updated_at).getTime() : 0;
-                const localRaw = localStorage.getItem('lina_' + key);
-                let localTime = 0;
-                if (localRaw) {
-                    try { localTime = JSON.parse(localRaw)._cloud_updated || 0; } catch (e) {}
-                }
-
-                // 云端更新 → 覆盖本地
-                if (cloudTime > localTime || !localRaw) {
-                    const val = typeof row.value === 'string' ? JSON.parse(row.value) : row.value;
-                    val._cloud_updated = cloudTime;
-                    localStorage.setItem('lina_' + key, JSON.stringify(val));
-                    console.log('☁️ 拉取:', key, cloudTime > localTime ? '(云端更新)' : '(本地缺失)');
-                } else {
-                    console.log('☁️ 跳过:', key, '(本地已最新)');
-                }
-            } catch (e) {
-                console.warn('☁️ 拉取失败:', key, e.message);
-            }
-        }
-
+        await pullAll(); // 无条件覆盖本地
         ready = true;
-        console.log('☁️ 初始化完成');
+        console.log('☁️ 初始化完成，快照:', Object.keys(lastSnapshot));
 
-        // 启动轮询
-        startPolling();
-    }
-
-    // ====== 轮询：每 5 秒检查对方改动 ======
-    function startPolling() {
-        if (pollTimer) return;
-        let lastCheck = new Date(Date.now() - 10000).toISOString(); // 查最近10秒
-
-        pollTimer = setInterval(async () => {
-            try {
-                const ts = lastCheck;
-                const resp = await fetch(
-                    API + '?select=key,value,updated_at&updated_at=gt.' + ts +
-                    '&order=updated_at.desc&limit=20&_=' + Date.now(),
-                    { method: 'GET', headers: hdrs() }
-                );
-                lastCheck = new Date().toISOString();
-
-                if (!resp.ok) return;
-                const rows = await resp.json();
-                if (!rows || rows.length === 0) return;
-
-                let changed = false;
-                for (const row of rows) {
-                    const key = row.key;
-                    if (!key || !row.value) continue;
-                    if (!SYNC_KEYS.includes(key)) continue;
-
-                    const cloudTime = row.updated_at ? new Date(row.updated_at).getTime() : Date.now();
-                    const localRaw = localStorage.getItem('lina_' + key);
-                    let localTime = 0;
-                    if (localRaw) {
-                        try { localTime = JSON.parse(localRaw)._cloud_updated || 0; } catch (e) {}
-                    }
-
-                    // 只覆盖本地比云端旧的
-                    if (cloudTime <= localTime) continue;
-
-                    const val = typeof row.value === 'string' ? JSON.parse(row.value) : row.value;
-                    val._cloud_updated = cloudTime;
-                    localStorage.setItem('lina_' + key, JSON.stringify(val));
-                    changed = true;
-                    console.log('📡 轮询更新:', key);
+        // 每 3 秒检查云端变化
+        if (!pollTimer) {
+            pollTimer = setInterval(async () => {
+                const changed = await pullAll();
+                if (changed) {
+                    console.log('📡 触发 UI 刷新');
+                    listeners.forEach(fn => { try { fn(); } catch (e) {} });
                 }
-
-                if (changed) notifyCallbacks();
-            } catch (e) {
-                // 静默
-            }
-        }, 5000);
-        console.log('🔗 轮询已启动（5秒）');
+            }, 3000);
+            console.log('🔗 轮询启动（3秒）');
+        }
     }
 
-    // ====== 写入云端（同步调用，异步发送） ======
+    // ====== 写入：本地 + 云端 ======
     function cloudSet(key, value) {
         if (!SYNC_KEYS.includes(key)) return;
 
-        // 打时间戳
-        const ts = Date.now();
-        if (value && typeof value === 'object' && !Array.isArray(value)) {
-            value._cloud_updated = ts;
-        }
+        const json = JSON.stringify(value);
 
-        // 更新本地
-        try { localStorage.setItem('lina_' + key, JSON.stringify(value)); } catch (e) {}
+        // 写本地
+        try { localStorage.setItem('lina_' + key, json); } catch (e) {}
 
-        // 异步发送到云端
-        if (ready) {
-            const jsonStr = JSON.stringify(value);
-            fetch(API, {
-                method: 'POST',
-                headers: { ...hdrs(), 'Prefer': 'resolution=merge-duplicates' },
-                body: JSON.stringify({ key, value: jsonStr, updated_at: new Date(ts).toISOString() }),
-            }).catch(e => console.warn('☁️ 写入失败:', key, e.message));
-        }
+        // 更新快照（避免自己触发刷新）
+        lastSnapshot[key] = json;
+
+        if (!ready) return;
+
+        // POST 到 Supabase（upsert by key）
+        const ts = new Date().toISOString();
+        fetch(API + '?key=eq.' + encodeURIComponent(key), {
+            method: 'POST',
+            headers: { ...hdrs(), 'Prefer': 'resolution=merge-duplicates' },
+            body: JSON.stringify({ key, value: json, updated_at: ts }),
+        }).then(r => {
+            if (!r.ok && r.status !== 201) {
+                console.warn('☁️ 写入失败:', key, r.status);
+            }
+        }).catch(e => {
+            console.warn('☁️ 写入异常:', key, e.message);
+        });
     }
 
-    // ====== 回调 ======
-    function onUpdate(fn) { callbacks.push(fn); }
-    function notifyCallbacks() { callbacks.forEach(fn => { try { fn(); } catch (e) {} }); }
+    function onChange(fn) { listeners.push(fn); }
 
-    return { init, cloudSet, onUpdate, isReady: () => ready };
+    // 强制拉取（手动同步按钮用）
+    async function _forcePull() {
+        lastSnapshot = {}; // 清空快照强制覆盖
+        await pullAll();
+    }
+
+    return { init, cloudSet, onChange, _forcePull };
 })();
