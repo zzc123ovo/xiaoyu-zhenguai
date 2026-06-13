@@ -7,7 +7,6 @@ const CloudStore = (() => {
     const SUPABASE_URL = 'https://xsecjawvrqelkxdhwfix.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_uKPRFS3_Ltp0bxdDNuPkow_bhxz-CIA';
 
-    // 需要云端同步的数据 key
     const SYNC_KEYS = [
         'period_settings',
         'moods',
@@ -20,89 +19,95 @@ const CloudStore = (() => {
 
     let client = null;
     let channel = null;
-    let initialized = false;
+    let ready = false;
     let updateCallbacks = [];
 
-    // 防抖队列：同一 key 多次写入合并为一次网络请求
+    // 防抖队列
     let syncQueue = {};
     let syncTimer = null;
 
-    // ====== 初始化 ======
+    // ====== 初始化：先跑云端拉取，再返回 ======
     async function init() {
-        if (initialized) return;
+        if (ready) return;
 
         if (typeof supabase === 'undefined') {
-            console.warn('⚠️ Supabase SDK 未加载，使用纯本地存储');
+            console.warn('⚠️ Supabase SDK 未加载');
             return;
         }
 
-        try {
-            client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        // 立即创建客户端（同步操作）
+        client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+            realtime: { params: { eventsPerSecond: 10 } },
+        });
+        console.log('☁️ Supabase 客户端已创建');
 
-            // 从云端拉取数据合并到本地
-            await pullAllFromCloud();
-            console.log('☁️ Supabase 云端数据同步完成');
+        // 先从云端拉取数据覆盖本地（await 确保完成）
+        await pullAllFromCloud();
 
-            // 启动实时监听
-            setupRealtime();
-            console.log('🔗 Supabase 实时同步已启动');
-        } catch (e) {
-            console.warn('☁️ 云端初始化失败，使用本地数据:', e.message);
-        }
+        // 启动实时监听
+        setupRealtime();
 
-        initialized = true;
+        ready = true;
+        console.log('☁️ 云端同步已就绪');
     }
 
-    // ====== 从云端拉取全量数据 ======
+    // ====== 拉取全量数据 ======
     async function pullAllFromCloud() {
+        if (!client) return;
         try {
             const { data, error } = await client
                 .from('app_data')
                 .select('key, value, updated_at');
 
             if (error) {
-                // 表不存在时的友好提示
                 if (error.code === '42P01') {
-                    console.warn('☁️ 数据表未创建，请在 Supabase SQL Editor 中运行建表 SQL');
+                    console.warn('☁️ 数据表未创建');
                 } else {
-                    console.error('☁️ 拉取数据失败:', error.message);
+                    console.error('☁️ 拉取失败:', error.message);
                 }
                 return;
             }
 
-            if (!data) return;
+            if (!data || data.length === 0) {
+                console.log('☁️ 云端暂无数据');
+                return;
+            }
 
+            let pulled = 0;
             data.forEach(row => {
                 const key = row.key;
                 const value = row.value;
                 if (!key || !value) return;
 
-                const localRaw = localStorage.getItem('lina_' + key);
                 const cloudTime = row.updated_at ? new Date(row.updated_at).getTime() : 0;
+                const localRaw = localStorage.getItem('lina_' + key);
 
-                // 比较时间戳，云端更新则覆盖本地
                 let localTime = 0;
                 if (localRaw) {
                     try {
-                        const localData = JSON.parse(localRaw);
-                        localTime = localData._cloud_updated || 0;
+                        const d = JSON.parse(localRaw);
+                        localTime = d._cloud_updated || 0;
                     } catch (e) {}
                 }
 
+                // 云端更新才覆盖
                 if (cloudTime > localTime || !localRaw) {
                     const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+                    parsed._cloud_updated = cloudTime;
                     localStorage.setItem('lina_' + key, JSON.stringify(parsed));
+                    pulled++;
                 }
             });
 
-            console.log('☁️ 云端拉取完成，共', data.length, '条');
+            console.log('☁️ 拉取完成，更新', pulled, '条，共', data.length, '条');
         } catch (e) {
-            console.error('☁️ 拉取数据失败:', e.message);
+            console.error('☁️ 拉取异常:', e.message);
         }
     }
 
-    // ====== 实时监听（对方改动自动同步） ======
+    // ====== 实时监听 ======
     function setupRealtime() {
+        if (!client) return;
         try {
             channel = client
                 .channel('app_data_changes')
@@ -110,56 +115,62 @@ const CloudStore = (() => {
                     'postgres_changes',
                     { event: '*', schema: 'public', table: 'app_data' },
                     (payload) => {
-                        const row = payload.new || payload.old;
-                        if (!row) return;
+                        if (!payload.new) return;
+                        const row = payload.new;
                         const key = row.key;
+                        const value = row.value;
+                        if (!key || !value) return;
 
-                        // 跳过自己刚写入的数据（防抖队列中的）
-                        if (syncQueue[key]) return;
+                        // 跳过自己刚发的（防抖队列中的）
+                        if (syncQueue[key] !== undefined) return;
 
-                        if (payload.eventType === 'DELETE') {
-                            localStorage.removeItem('lina_' + key);
-                        } else {
-                            // INSERT 或 UPDATE
-                            const value = row.value;
-                            if (key && value) {
-                                const parsed = typeof value === 'string' ? JSON.parse(value) : value;
-                                parsed._cloud_updated = row.updated_at
-                                    ? new Date(row.updated_at).getTime()
-                                    : Date.now();
-                                localStorage.setItem('lina_' + key, JSON.stringify(parsed));
-                            }
-                        }
+                        const cloudTime = row.updated_at
+                            ? new Date(row.updated_at).getTime()
+                            : Date.now();
+                        const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+                        parsed._cloud_updated = cloudTime;
+                        localStorage.setItem('lina_' + key, JSON.stringify(parsed));
 
+                        console.log('📡 实时收到:', key);
                         triggerUpdate(key);
                     }
                 )
-                .subscribe((status) => {
+                .subscribe((status, err) => {
                     if (status === 'SUBSCRIBED') {
-                        console.log('🔗 Supabase Realtime 已连接');
+                        console.log('🔗 Realtime 已连接');
                     } else if (status === 'CHANNEL_ERROR') {
-                        console.warn('🔗 实时连接出错（可能是表未加入 realtime）');
+                        console.warn('🔗 Realtime 错误:', err);
                     }
                 });
         } catch (e) {
-            console.warn('🔗 实时同步启动失败:', e.message);
+            console.warn('🔗 Realtime 启动失败:', e.message);
         }
     }
 
-    // ====== 数据变化通知 UI 刷新 ======
+    // ====== 通知 UI 刷新 ======
     function triggerUpdate(key) {
         updateCallbacks.forEach(cb => {
             try { cb(key); } catch (e) {}
         });
     }
 
-    // ====== 写入云端（异步，防抖合并） ======
+    // ====== 写入云端 ======
     function cloudSet(key, value) {
-        if (!initialized || !client || !SYNC_KEYS.includes(key)) return;
+        // 打时间戳
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+            value._cloud_updated = Date.now();
+        }
+
+        // 更新本地（加上时间戳）
+        try {
+            localStorage.setItem('lina_' + key, JSON.stringify(value));
+        } catch (e) {}
+
+        if (!ready || !client || !SYNC_KEYS.includes(key)) return;
 
         syncQueue[key] = value;
         if (syncTimer) clearTimeout(syncTimer);
-        syncTimer = setTimeout(() => flushQueue(), 500);
+        syncTimer = setTimeout(() => flushQueue(), 300);
     }
 
     async function flushQueue() {
@@ -168,29 +179,27 @@ const CloudStore = (() => {
 
         for (const [key, value] of Object.entries(items)) {
             try {
-                const jsonValue = JSON.stringify(value);
+                const jsonStr = JSON.stringify(value);
                 const { error } = await client
                     .from('app_data')
                     .upsert(
-                        { key, value: jsonValue, updated_at: new Date().toISOString() },
+                        { key, value: jsonStr, updated_at: new Date().toISOString() },
                         { onConflict: 'key' }
                     );
 
                 if (error) {
-                    console.error('☁️ 同步失败 (' + key + '):', error.message);
+                    console.error('☁️ 写入失败 (' + key + '):', error.message);
                 }
             } catch (e) {
-                console.error('☁️ 同步失败 (' + key + '):', e.message);
+                console.error('☁️ 写入异常 (' + key + '):', e.message);
             }
         }
     }
 
-    // ====== 注册回调 ======
     function onUpdate(callback) {
         updateCallbacks.push(callback);
     }
 
-    // ====== 手动刷新 ======
     async function refresh() {
         if (!client) return;
         await pullAllFromCloud();
@@ -202,6 +211,6 @@ const CloudStore = (() => {
         cloudSet,
         onUpdate,
         refresh,
-        isReady: () => initialized,
+        isReady: () => ready,
     };
 })();

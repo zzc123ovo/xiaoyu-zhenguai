@@ -300,12 +300,11 @@ function initLocationButton() {
 // ========================================
 //  初始化 App
 // ========================================
-function initApp() {
-    // 先初始化云端同步（异步，不阻塞后续初始化）
+async function initApp() {
+    // ★ 先等云端数据拉取完成，再初始化模块
     if (typeof CloudStore !== 'undefined') {
-        CloudStore.init().then(() => {
-            console.log('☁️ 云端数据已就绪');
-        });
+        await CloudStore.init();
+        console.log('☁️ 云端数据已就绪');
     }
 
     AppModule.init();
@@ -333,7 +332,7 @@ function initApp() {
         checkDayReset();
     }, 60000);
 
-    // 云端数据变化时的全局监听
+    // 云端数据变化时自动刷新 UI
     if (typeof CloudStore !== 'undefined') {
         CloudStore.onUpdate((key) => {
             console.log('📡 收到云端更新:', key);
