@@ -15,6 +15,8 @@ const StorageModule = {
     set(key, value) {
         try { localStorage.setItem('lina_' + key, JSON.stringify(value)); }
         catch (e) { console.error('存储失败:', e); }
+        // 同步到云端（异步，不阻塞本地操作）
+        if (typeof CloudStore !== 'undefined') CloudStore.cloudSet(key, value);
     },
     remove(key) { try { localStorage.removeItem('lina_' + key); } catch (e) {} },
 };
@@ -299,6 +301,13 @@ function initLocationButton() {
 //  初始化 App
 // ========================================
 function initApp() {
+    // 先初始化云端同步（异步，不阻塞后续初始化）
+    if (typeof CloudStore !== 'undefined') {
+        CloudStore.init().then(() => {
+            console.log('☁️ 云端数据已就绪');
+        });
+    }
+
     AppModule.init();
     updateHeaderDate();
     updateGreeting();
@@ -323,6 +332,19 @@ function initApp() {
         updateGreeting();
         checkDayReset();
     }, 60000);
+
+    // 云端数据变化时的全局监听
+    if (typeof CloudStore !== 'undefined') {
+        CloudStore.onUpdate((key) => {
+            console.log('📡 收到云端更新:', key);
+            if (key === 'moods') MoodModule.render();
+            if (key === 'meals') { MealsModule.render(); MealsModule.updateHomeStat(); }
+            if (key === 'calendar_events') CalendarModule.render();
+            if (key === 'users_daily_data') RemindersModule.renderAll();
+            if (key === 'partner_reminders') RemindersModule.render();
+            if (key === 'period_settings') { PeriodModule.updateAllUI(); CalendarModule.render(); }
+        });
+    }
 
     console.log('🦊 小鱼真乖 · 玲娜贝儿 已就绪！');
     console.log('💖 亲爱的小鱼，这是小川特给你做的app哦～');
