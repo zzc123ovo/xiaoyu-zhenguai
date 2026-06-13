@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#FF7BAC">
+    <title>小鱼真乖 · 玲娜贝儿</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦊</text></svg>">
+</head>
+<body>
+    <!-- 启动画面 -->
+    <div id="splash-screen">
+        <div class="splash-content">
+            <div class="splash-fox">🦊</div>
+            <h1 class="splash-title">小鱼真乖</h1>
+            <p class="splash-subtitle">🦊 玲娜贝儿 · 小川给你最贴心的关怀</p>
+            <div class="splash-flower">🌸</div>
+        </div>
+    </div>
+
+    <!-- 登录页面 -->
+    <div id="login-screen" class="hidden">
+        <div class="login-container">
+            <div class="login-logo">🦊</div>
+            <h1 class="login-sitename">小鱼真乖</h1>
+            <p class="login-sub">玲娜贝儿 · 只属于小鱼和小川</p>
+
+            <!-- 选择身份 -->
+            <div class="login-chooser">
+                <div class="login-card" data-user="xiaoyu" id="login-card-xiaoyu">
+                    <span class="login-card-emoji">🐟</span>
+                    <span class="login-card-name">小鱼</span>
+                </div>
+                <div class="login-card" data-user="xiaochuan" id="login-card-xiaochuan">
+                    <span class="login-card-emoji">🦊</span>
+                    <span class="login-card-name">小川</span>
+                </div>
+            </div>
+
+            <!-- 密码区 -->
+            <div class="login-pw-box" id="login-pw-box" style="display:none;">
+                <p class="login-pw-label" id="login-pw-label"></p>
+                <div class="login-dots">
+                    <span class="login-dot" id="dot0"></span>
+                    <span class="login-dot" id="dot1"></span>
+                    <span class="login-dot" id="dot2"></span>
+                    <span class="login-dot" id="dot3"></span>
+                </div>
+                <p class="login-error" id="login-error"></p>
+                <div class="login-numpad">
+                    <button class="num-key" data-n="1">1</button>
+                    <button class="num-key" data-n="2">2</button>
+                    <button class="num-key" data-n="3">3</button>
+                    <button class="num-key" data-n="4">4</button>
+                    <button class="num-key" data-n="5">5</button>
+                    <button class="num-key" data-n="6">6</button>
+                    <button class="num-key" data-n="7">7</button>
+                    <button class="num-key" data-n="8">8</button>
+                    <button class="num-key" data-n="9">9</button>
+                    <button class="num-key num-empty"></button>
+                    <button class="num-key" data-n="0">0</button>
+                    <button class="num-key num-del" data-n="del">⌫</button>
+                </div>
+            </div>
+
+            <p class="login-footer">亲爱的小鱼，这是小川特地给你做的 💖</p>
+        </div>
+    </div>
+
+    <!-- 主应用容器 -->
+    <div id="app" class="hidden">
+        <!-- 顶部栏 -->
+        <header class="top-bar">
+            <div class="top-bar-left">
+                <span class="fox-icon">🦊</span>
+                <span class="app-name">小鱼真乖</span>
+            </div>
+            <div class="top-bar-right">
+                <!-- 用户切换 -->
+                <div class="user-switcher" id="user-switcher">
+                    <button class="user-btn active" data-user="xiaoyu" id="btn-user-xiaoyu">
+                        🐟 小鱼
+                    </button>
+                    <button class="user-btn" data-user="xiaochuan" id="btn-user-xiaochuan">
+                        🦊 小川
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- 页面内容区 -->
+        <main class="main-content">
+            <!-- ==================== 首页 ==================== -->
+            <section id="page-home" class="page active">
+                <!-- 玲娜贝儿问候卡片 -->
+                <div class="greeting-card">
+                    <div class="greeting-fox">
+                        <span class="fox-face">🦊</span>
+                    </div>
+                    <h2 class="greeting-text" id="greeting-text">早安，小可爱～</h2>
+                    <p class="greeting-sub" id="greeting-sub">今天也是元气满满的一天哦！</p>
+                </div>
+
+                <!-- 今日心情卡片 - 两人可见 -->
+                <div class="mood-card" id="mood-card">
+                    <h4 class="mood-card-title">💕 今日心情</h4>
+                    <div class="mood-both">
+                        <div class="mood-person" id="mood-xiaoyu">
+                            <span class="mood-avatar">🐟</span>
+                            <span class="mood-emoji" id="mood-emoji-xiaoyu">😊</span>
+                            <span class="mood-text" id="mood-text-xiaoyu">今天心情不错～</span>
+                            <span class="mood-time" id="mood-time-xiaoyu"></span>
+                        </div>
+                        <div class="mood-divider">💞</div>
+                        <div class="mood-person" id="mood-xiaochuan">
+                            <span class="mood-avatar">🦊</span>
+                            <span class="mood-emoji" id="mood-emoji-xiaochuan">🥰</span>
+                            <span class="mood-text" id="mood-text-xiaochuan">想小鱼了～</span>
+                            <span class="mood-time" id="mood-time-xiaochuan"></span>
+                        </div>
+                    </div>
+                    <button class="btn-mood" id="btn-set-mood">✏️ 设置我的心情</button>
+                </div>
+
+                <!-- 天气卡片 -->
+                <div class="weather-card" id="weather-card">
+                    <div class="weather-loading" id="weather-loading">
+                        <span>正在获取天气...</span>
+                    </div>
+                    <div class="weather-content hidden" id="weather-content">
+                        <div class="weather-main">
+                            <span class="weather-icon" id="weather-icon">☀️</span>
+                            <div class="weather-temp">
+                                <span class="temp-value" id="temp-value">--</span>
+                                <span class="temp-unit">°C</span>
+                            </div>
+                        </div>
+                        <div class="weather-details">
+                            <div class="weather-detail">
+                                <span class="detail-label">体感温度</span>
+                                <span class="detail-value" id="feels-like">--°C</span>
+                            </div>
+                            <div class="weather-detail">
+                                <span class="detail-label">湿度</span>
+                                <span class="detail-value" id="humidity">--%</span>
+                            </div>
+                            <div class="weather-detail">
+                                <span class="detail-label">天气</span>
+                                <span class="detail-value" id="weather-desc">--</span>
+                            </div>
+                        </div>
+                        <p class="weather-tip" id="weather-tip"></p>
+                    </div>
+                </div>
+
+                <!-- 快速状态卡片 -->
+                <div class="quick-stats">
+                    <div class="stat-card" id="stat-period">
+                        <span class="stat-icon">📅</span>
+                        <span class="stat-value" id="stat-cycle-day">--</span>
+                        <span class="stat-label">周期天数</span>
+                    </div>
+                    <div class="stat-card" id="stat-water">
+                        <span class="stat-icon">💧</span>
+                        <span class="stat-value" id="stat-water-count">0/8</span>
+                        <span class="stat-label">今日饮水</span>
+                    </div>
+                    <div class="stat-card" id="stat-meals">
+                        <span class="stat-icon">🍽️</span>
+                        <span class="stat-value" id="stat-meals-count">0顿</span>
+                        <span class="stat-label">今日分享</span>
+                    </div>
+                </div>
+
+                <!-- 小川的提醒卡片（小川可以设置，小鱼可以看到） -->
+                <div class="reminder-card" id="partner-reminder-card">
+                    <div class="reminder-card-header">
+                        <h4>💌 <span id="reminder-card-title">小川的提醒</span></h4>
+                        <span class="reminder-badge" id="reminder-count">0</span>
+                    </div>
+                    <div class="reminder-list" id="partner-reminders">
+                        <p class="reminder-empty">暂无提醒～</p>
+                    </div>
+                    <button class="btn-reminder-add" id="btn-add-reminder">➕ 添加提醒</button>
+                </div>
+
+                <!-- 今日小贴士 -->
+                <div class="tip-card" id="daily-tip">
+                    <div class="tip-header">
+                        <span>💡 今日小贴士</span>
+                    </div>
+                    <p class="tip-content" id="tip-content">记得多喝水，保持好心情～</p>
+                </div>
+            </section>
+
+            <!-- ==================== 日历页 ==================== -->
+            <section id="page-calendar" class="page">
+                <div class="calendar-container">
+                    <div class="calendar-header">
+                        <button class="cal-nav-btn" id="cal-prev">◀</button>
+                        <h3 class="cal-month-year" id="cal-month-year"></h3>
+                        <button class="cal-nav-btn" id="cal-next">▶</button>
+                    </div>
+                    <div class="calendar-weekdays">
+                        <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
+                    </div>
+                    <div class="calendar-grid" id="calendar-grid"></div>
+                    <div class="calendar-legend">
+                        <span class="legend-item"><span class="legend-dot period"></span> 经期</span>
+                        <span class="legend-item"><span class="legend-dot predicted"></span> 预测经期</span>
+                        <span class="legend-item"><span class="legend-dot today"></span> 今天</span>
+                    </div>
+                </div>
+                <div class="events-card" id="events-card">
+                    <h4>📋 近期日程</h4>
+                    <div class="events-list" id="events-list">
+                        <p class="events-empty">点击日历中的日期来添加事件～</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================== 经期护理页 ==================== -->
+            <section id="page-period" class="page">
+                <div class="period-header-card">
+                    <h3>🌸 经期护理</h3>
+                    <div class="period-cycle-info" id="period-cycle-info">
+                        <span>设置你的经期信息以获取个性化护理建议</span>
+                    </div>
+                </div>
+
+                <div class="phase-card" id="phase-card">
+                    <div class="phase-icon" id="phase-icon">🌸</div>
+                    <h4 class="phase-name" id="phase-name">当前阶段</h4>
+                    <p class="phase-desc" id="phase-desc">请先设置经期信息</p>
+                    <div class="phase-bar">
+                        <div class="phase-progress" id="phase-progress" style="width: 0%"></div>
+                    </div>
+                    <p class="phase-days" id="phase-days"></p>
+                </div>
+
+                <div class="care-card">
+                    <h4>💆 今日护理建议</h4>
+                    <div class="care-tips" id="care-tips">
+                        <div class="care-tip">
+                            <span class="care-tip-icon">🍵</span>
+                            <div class="care-tip-content">
+                                <strong>饮食建议</strong>
+                                <p>请先设置经期信息</p>
+                            </div>
+                        </div>
+                        <div class="care-tip">
+                            <span class="care-tip-icon">🧘</span>
+                            <div class="care-tip-content">
+                                <strong>运动建议</strong>
+                                <p>请先设置经期信息</p>
+                            </div>
+                        </div>
+                        <div class="care-tip">
+                            <span class="care-tip-icon">💤</span>
+                            <div class="care-tip-content">
+                                <strong>休息建议</strong>
+                                <p>请先设置经期信息</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-card">
+                    <h4>⚙️ 经期设置</h4>
+                    <div class="period-settings">
+                        <div class="setting-row">
+                            <label>上次经期开始日期</label>
+                            <input type="date" id="period-start-date" class="date-input">
+                        </div>
+                        <div class="setting-row">
+                            <label>周期长度（天）</label>
+                            <input type="number" id="cycle-length" value="28" min="20" max="45" class="num-input">
+                        </div>
+                        <div class="setting-row">
+                            <label>经期持续天数</label>
+                            <input type="number" id="period-length" value="5" min="2" max="10" class="num-input">
+                        </div>
+                        <button class="btn-primary" id="save-period-settings">保存设置</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================== 日常关怀页 ==================== -->
+            <section id="page-daily" class="page">
+                <!-- 喝水追踪 -->
+                <div class="daily-card water-card">
+                    <div class="daily-card-header">
+                        <span class="daily-icon">💧</span>
+                        <div>
+                            <h4>今日饮水</h4>
+                            <p class="daily-subtitle">每天8杯水，健康又美丽</p>
+                        </div>
+                    </div>
+                    <div class="water-glasses" id="water-glasses"></div>
+                    <div class="water-progress">
+                        <div class="water-progress-bar" id="water-progress-bar" style="width: 0%"></div>
+                    </div>
+                    <p class="water-count" id="water-count-text">0 / 8 杯</p>
+                    <button class="btn-water" id="btn-add-water">➕ 喝一杯水</button>
+                </div>
+
+                <!-- 饮食分享 - 两人互相分享 -->
+                <div class="daily-card meal-card">
+                    <div class="daily-card-header">
+                        <span class="daily-icon">🍽️</span>
+                        <div>
+                            <h4>今日美食分享</h4>
+                            <p class="daily-subtitle">记录每一顿，分享给彼此 💕</p>
+                        </div>
+                    </div>
+                    <!-- 美食照片流 -->
+                    <div class="meal-stream" id="meal-stream">
+                        <p class="meals-empty">今天还没有分享美食哦～<br>点击下方按钮拍照分享吧！</p>
+                    </div>
+                    <div class="meal-actions">
+                        <button class="btn-meal" id="btn-add-meal">📸 拍照分享美食</button>
+                        <input type="file" id="meal-photo-input" accept="image/*" capture="environment" style="display:none">
+                    </div>
+                </div>
+
+                <!-- 健康习惯 -->
+                <div class="daily-card wellness-card">
+                    <div class="daily-card-header">
+                        <span class="daily-icon">🌿</span>
+                        <div>
+                            <h4>健康习惯</h4>
+                            <p class="daily-subtitle">每天坚持，做更好的自己</p>
+                        </div>
+                    </div>
+                    <div class="wellness-list">
+                        <div class="wellness-item" data-id="stretch">
+                            <span class="wellness-icon">🧘‍♀️</span>
+                            <span class="wellness-label">拉伸5分钟</span>
+                            <button class="wellness-check">○</button>
+                        </div>
+                        <div class="wellness-item" data-id="skincare">
+                            <span class="wellness-icon">✨</span>
+                            <span class="wellness-label">护肤流程</span>
+                            <button class="wellness-check">○</button>
+                        </div>
+                        <div class="wellness-item" data-id="walk">
+                            <span class="wellness-icon">🚶‍♀️</span>
+                            <span class="wellness-label">散步15分钟</span>
+                            <button class="wellness-check">○</button>
+                        </div>
+                        <div class="wellness-item" data-id="mood_journal">
+                            <span class="wellness-icon">📝</span>
+                            <span class="wellness-label">记录心情</span>
+                            <button class="wellness-check">○</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================== AR小惊喜页 ==================== -->
+            <section id="page-ar" class="page">
+                <div class="ar-header-card">
+                    <h3>📷 AR 小惊喜</h3>
+                    <p>扫描身边的物品，发现小川留下的悄悄话～</p>
+                </div>
+
+                <!-- 相机预览 -->
+                <div class="ar-camera-container">
+                    <video id="ar-video" autoplay playsinline class="ar-video"></video>
+                    <div class="ar-overlay" id="ar-overlay">
+                        <span class="ar-overlay-text">对准物品，点击扫描</span>
+                    </div>
+                    <!-- AR 惊喜消息弹出 -->
+                    <div class="ar-message-popup hidden" id="ar-message-popup">
+                        <div class="ar-message-content">
+                            <span class="ar-message-emoji" id="ar-message-emoji">💌</span>
+                            <p class="ar-message-text" id="ar-message-text"></p>
+                            <p class="ar-message-from" id="ar-message-from"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="ar-controls">
+                    <button class="btn-ar-scan" id="btn-ar-scan">🔍 扫描物品</button>
+                    <button class="btn-ar-camera" id="btn-ar-toggle-camera">📷 切换摄像头</button>
+                </div>
+
+                <!-- 已设置的惊喜消息列表 -->
+                <div class="ar-surprises-card">
+                    <h4>🎁 已设置的惊喜消息</h4>
+                    <div class="surprises-list" id="surprises-list">
+                        <p class="surprises-empty">还没有设置惊喜消息～<br>去设置页面添加吧！</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================== 设置页 ==================== -->
+            <section id="page-settings" class="page">
+                <!-- 智能推送 -->
+                <div class="settings-section">
+                    <h4>🔔 智能推送</h4>
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <span class="setting-title">启用智能推送</span>
+                            <span class="setting-desc">定时提醒喝水、经期护理等</span>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="toggle-notifications">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <span class="setting-title">喝水提醒</span>
+                            <span class="setting-desc">每小时提醒一次</span>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="toggle-water-reminder" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <span class="setting-title">经期提醒</span>
+                            <span class="setting-desc">经期前3天提醒做准备</span>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="toggle-period-reminder" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- AR惊喜管理 -->
+                <div class="settings-section">
+                    <h4>🎁 AR 惊喜消息管理</h4>
+                    <p class="setting-desc" style="margin-bottom:12px;">设置触发物品和对应的悄悄话，当小鱼扫描到对应物品时就会显示～</p>
+                    <div class="ar-settings-list" id="ar-settings-list">
+                        <p style="color:var(--text-light);font-size:13px;">加载中...</p>
+                    </div>
+                    <button class="btn-primary" id="btn-add-surprise">➕ 添加惊喜消息</button>
+                </div>
+
+                <!-- 天气设置 -->
+                <div class="settings-section">
+                    <h4>🌤️ 天气设置</h4>
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <span class="setting-title">自动定位</span>
+                            <span class="setting-desc" id="location-status">点击获取当前位置</span>
+                        </div>
+                        <button class="btn-small" id="btn-location">📍 定位</button>
+                    </div>
+                </div>
+
+                <!-- 关于 -->
+                <div class="settings-section">
+                    <h4>💖 关于</h4>
+                    <div class="about-content">
+                        <p>🦊 亲爱的小鱼，这是小川特地给你做的app哦，后续还会一直给你完善哦我最亲爱的宝宝。</p>
+                        <p class="version">v1.0.0 · 为你而生 💖</p>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- 底部导航栏 -->
+        <nav class="bottom-nav">
+            <button class="nav-item active" data-page="home">
+                <span class="nav-icon">🏠</span>
+                <span class="nav-label">首页</span>
+            </button>
+            <button class="nav-item" data-page="calendar">
+                <span class="nav-icon">📅</span>
+                <span class="nav-label">日历</span>
+            </button>
+            <button class="nav-item" data-page="period">
+                <span class="nav-icon">🌸</span>
+                <span class="nav-label">经期</span>
+            </button>
+            <button class="nav-item" data-page="daily">
+                <span class="nav-icon">💝</span>
+                <span class="nav-label">日常</span>
+            </button>
+            <button class="nav-item" data-page="ar">
+                <span class="nav-icon">📷</span>
+                <span class="nav-label">AR</span>
+            </button>
+            <button class="nav-item" data-page="settings">
+                <span class="nav-icon">⚙️</span>
+                <span class="nav-label">设置</span>
+            </button>
+        </nav>
+    </div>
+
+    <!-- Toast 消息 -->
+    <div id="toast" class="toast hidden"></div>
+
+    <!-- 心情设置弹窗 -->
+    <div class="modal-overlay hidden" id="mood-modal">
+        <div class="modal-content">
+            <h4>✏️ 设置今日心情</h4>
+            <div class="mood-emoji-picker" id="mood-emoji-picker">
+                <button class="mood-emoji-option">😊</button>
+                <button class="mood-emoji-option">🥰</button>
+                <button class="mood-emoji-option">😋</button>
+                <button class="mood-emoji-option">😎</button>
+                <button class="mood-emoji-option">🤗</button>
+                <button class="mood-emoji-option">😴</button>
+                <button class="mood-emoji-option">😢</button>
+                <button class="mood-emoji-option">😤</button>
+                <button class="mood-emoji-option">🤒</button>
+                <button class="mood-emoji-option">🥳</button>
+                <button class="mood-emoji-option">😍</button>
+                <button class="mood-emoji-option">💪</button>
+            </div>
+            <input class="modal-input" type="text" id="mood-text-input" placeholder="说说今天的心情..." maxlength="50">
+            <div class="modal-actions">
+                <button class="btn-cancel" id="mood-modal-close">取消</button>
+                <button class="btn-confirm" id="mood-modal-save">保存心情</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 饮食分享弹窗 -->
+    <div class="modal-overlay hidden" id="meal-modal">
+        <div class="modal-content">
+            <h4>🍽️ 分享美食</h4>
+            <div class="meal-preview" id="meal-preview">
+                <p class="meal-preview-placeholder">请先拍照或选择照片</p>
+                <img id="meal-preview-img" style="display:none;max-width:100%;border-radius:12px;" alt="预览">
+            </div>
+            <input class="modal-input" type="text" id="meal-caption-input" placeholder="这顿吃的是什么呀？" maxlength="30">
+            <div class="modal-actions">
+                <button class="btn-cancel" id="meal-modal-close">取消</button>
+                <button class="btn-confirm" id="meal-modal-save">分享</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script src="js/weather.js"></script>
+    <script src="js/calendar.js"></script>
+    <script src="js/period.js"></script>
+    <script src="js/reminders.js"></script>
+    <script src="js/mood.js"></script>
+    <script src="js/meals.js"></script>
+    <script src="js/ar.js"></script>
+    <script src="js/notifications.js"></script>
+</body>
+</html>
